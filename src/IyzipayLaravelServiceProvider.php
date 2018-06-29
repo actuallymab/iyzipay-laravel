@@ -20,7 +20,29 @@ class IyzipayLaravelServiceProvider extends ServiceProvider
             __DIR__ . '/../config/config.php' => config_path('iyzipay.php')
         ]);
 
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+        if (! class_exists('AddBillableFields')) {
+            $this->publishes([
+                __DIR__.'/../database/migrations/add_billable_fields.stub' => database_path('migrations/'.date('Y_m_d_His', time()).'_add_billable_fields.php'),
+            ], 'migrations');
+        }
+
+        if (! class_exists('CreateCreditCardsTable')) {
+            $this->publishes([
+                __DIR__.'/../database/migrations/create_credit_cards_table.php.stub' => database_path('migrations/'.date('Y_m_d_His', time()).'_create_credit_cards_table.php'),
+            ], 'migrations');
+        }
+
+        if (! class_exists('CreateSubscriptionsTable')) {
+            $this->publishes([
+                __DIR__.'/../database/migrations/create_subscriptions_table.php.stub' => database_path('migrations/'.date('Y_m_d_His', time()).'_create_subscriptions_table.php'),
+            ], 'migrations');
+        }
+
+        if (! class_exists('CreateTransactionsTable')) {
+            $this->publishes([
+                __DIR__.'/../database/migrations/create_transactions_table.php.stub' => database_path('migrations/'.date('Y_m_d_His', time()).'_create_transactions_table.php'),
+            ], 'migrations');
+        }
 
         $this->app->booted(function () {
             $schedule = $this->app->make(Schedule::class);
