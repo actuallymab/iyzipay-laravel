@@ -49,6 +49,14 @@
   "extra": {
     "branch-alias": {
       "dev-master": "1.0-dev"
+    },
+    "laravel": {
+      "providers": [
+        "Iyzico\\IyzipayLaravel\\IyzipayLaravelServiceProvider"
+      ],
+      "aliases": {
+        "IyzipayLaravel": "Iyzico\\IyzipayLaravel\\IyzipayLaravelFacade"
+      }
     }
   },
   "config": {
