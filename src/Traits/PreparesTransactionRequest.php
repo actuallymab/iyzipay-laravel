@@ -37,7 +37,7 @@ trait PreparesTransactionRequest
     {
         $totalPrice = 0;
         foreach ($attributes['products'] as $product) {
-            if (! $product instanceof ProductContract) {
+            if (!$product instanceof ProductContract) {
                 throw new TransactionFieldsException();
             }
             $totalPrice += $product->getPrice();
@@ -45,14 +45,14 @@ trait PreparesTransactionRequest
 
         $v = Validator::make($attributes, [
             'installment' => 'required|numeric|min:1',
-            'currency'    => 'required|in:' . implode(',', [
+            'currency' => 'required|in:' . implode(',', [
                     Currency::TL,
                     Currency::EUR,
                     Currency::GBP,
                     Currency::IRR,
                     Currency::USD
                 ]),
-            'paid_price'  => 'numeric|max:' . $totalPrice
+            'paid_price' => 'numeric|max:' . $totalPrice
         ]);
 
         if ($v->fails()) {
@@ -64,7 +64,7 @@ trait PreparesTransactionRequest
      * Creates transaction on iyzipay.
      *
      * @param Payable $payable
-     * @param CreditCard $creditCard
+     * @param $creditCard
      * @param array $attributes
      * @param bool $subscription
      *
@@ -73,10 +73,11 @@ trait PreparesTransactionRequest
      */
     protected function createTransactionOnIyzipay(
         Payable $payable,
-        CreditCard $creditCard,
+        $creditCard,
         array $attributes,
         $subscription = false
-    ): Payment {
+    ): Payment
+    {
         $this->validateTransactionFields($attributes);
         $paymentRequest = $this->createPaymentRequest($attributes, $subscription);
         $paymentRequest->setPaymentCard($this->preparePaymentCard($payable, $creditCard));
@@ -172,14 +173,24 @@ trait PreparesTransactionRequest
      * Prepares payment card class for iyzipay
      *
      * @param Payable $payable
-     * @param CreditCard $creditCard
+     * @param $creditCard
      * @return PaymentCard
      */
-    private function preparePaymentCard(Payable $payable, CreditCard $creditCard): PaymentCard
+    private function preparePaymentCard(Payable $payable, $creditCard): PaymentCard
     {
         $paymentCard = new PaymentCard();
-        $paymentCard->setCardUserKey($payable->iyzipay_key);
-        $paymentCard->setCardToken($creditCard->token);
+
+        if ($creditCard instanceof CreditCard) {
+            $paymentCard->setCardUserKey($payable->iyzipay_key);
+            $paymentCard->setCardToken($creditCard->token);
+        } else {
+            $paymentCard->setCardHolderName($creditCard['cardHolderName']);
+            $paymentCard->setCardNumber($creditCard['cardNumber']);
+            $paymentCard->setExpireMonth($creditCard['expireMonth']);
+            $paymentCard->setExpireYear($creditCard['expireYear']);
+            $paymentCard->setCvc($creditCard['cvc']);
+            $paymentCard->setRegisterCard(0);
+        }
 
         return $paymentCard;
     }

@@ -103,11 +103,12 @@ trait Payable
      * @param string $currency
      * @param int $installment
      * @param bool $subscription
+     * @param null $creditCard
      * @return Transaction
      */
-    public function pay(Collection $products, $currency = 'TRY', $installment = 1, $subscription = false): Transaction
+    public function pay(Collection $products, $currency = 'TRY', $installment = 1, $subscription = false, $creditCard = null): Transaction
     {
-        return IyzipayLaravel::singlePayment($this, $products, $currency, $installment, $subscription);
+        return IyzipayLaravel::singlePayment($this, $products, $currency, $installment, $subscription, $creditCard);
     }
 
     /**

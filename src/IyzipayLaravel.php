@@ -57,10 +57,10 @@ class IyzipayLaravel
         $card = $this->createCardOnIyzipay($payable, $attributes);
 
         $creditCardModel = new CreditCard([
-            'alias'  => $card->getCardAlias(),
+            'alias' => $card->getCardAlias(),
             'number' => $card->getBinNumber(),
-            'token'  => $card->getCardToken(),
-            'bank'   => $card->getCardBankName()
+            'token' => $card->getCardToken(),
+            'bank' => $card->getCardBankName()
         ]);
         $payable->creditCards()->save($creditCardModel);
 
@@ -92,17 +92,34 @@ class IyzipayLaravel
      * @param $currency
      * @param $installment
      * @param bool $subscription
-     *
+     * @param null $creditCard
      * @return Transaction $transactionModel
+     * @throws PayableMustHaveCreditCardException
      * @throws TransactionSaveException
      */
-    public function singlePayment(Payable $payable, Collection $products, $currency, $installment, $subscription = false): Transaction
+    public function singlePayment(Payable $payable, Collection $products, $currency, $installment, $subscription = false, $creditCard = null): Transaction
     {
-        $this->validateBillable($payable);
-        $this->validateHasCreditCard($payable);
+        if (!isset($creditCard)) {
+            $this->validateBillable($payable);
+            $this->validateHasCreditCard($payable);
 
-        $messages = []; // @todo imporove here
-        foreach ($payable->creditCards as $creditCard) {
+            $messages = []; // @todo imporove here
+            foreach ($payable->creditCards as $creditCard) {
+                try {
+                    $transaction = $this->createTransactionOnIyzipay(
+                        $payable,
+                        $creditCard,
+                        compact('products', 'currency', 'installment'),
+                        $subscription
+                    );
+
+                    return $this->storeTransactionModel($transaction, $payable, $products, $creditCard);
+                } catch (TransactionSaveException $e) {
+                    $messages[] = $creditCard->number . ': ' . $e->getMessage();
+                    continue;
+                }
+            }
+        } else {
             try {
                 $transaction = $this->createTransactionOnIyzipay(
                     $payable,
@@ -113,8 +130,7 @@ class IyzipayLaravel
 
                 return $this->storeTransactionModel($transaction, $payable, $products, $creditCard);
             } catch (TransactionSaveException $e) {
-                $messages[] = $creditCard->number . ': ' . $e->getMessage();
-                continue;
+                $messages[] = $creditCard['cardNumber'] . ': ' . $e->getMessage();
             }
         }
 
@@ -132,10 +148,10 @@ class IyzipayLaravel
         $cancel = $this->createCancelOnIyzipay($transactionModel);
 
         $transactionModel->voided_at = Carbon::now();
-        $refunds                     = $transactionModel->refunds;
-        $refunds[]                   = [
-            'type'        => 'void',
-            'amount'      => $cancel->getPrice(),
+        $refunds = $transactionModel->refunds;
+        $refunds[] = [
+            'type' => 'void',
+            'amount' => $cancel->getPrice(),
             'iyzipay_key' => $cancel->getPaymentId()
         ];
 
@@ -182,7 +198,7 @@ class IyzipayLaravel
      */
     private function validateBillable(Payable $payable): void
     {
-        if (! $payable->isBillable()) {
+        if (!$payable->isBillable()) {
             throw new BillFieldsException();
         }
     }
@@ -203,22 +219,22 @@ class IyzipayLaravel
      * @param Payment $transaction
      * @param PayableContract $payable
      * @param Collection $products
-     * @param CreditCard $creditCard
-     *
+     * @param $creditCard
      * @return Transaction
      */
     private function storeTransactionModel(
         Payment $transaction,
         Payable $payable,
         Collection $products,
-        CreditCard $creditCard
-    ): Transaction {
+        $creditCard
+    ): Transaction
+    {
         $iyzipayProducts = [];
         foreach ($transaction->getPaymentItems() as $paymentItem) {
             $iyzipayProducts[] = [
                 'iyzipay_key' => $paymentItem->getPaymentTransactionId(),
-                'paidPrice'   => $paymentItem->getPaidPrice(),
-                'product'     => $products->where(
+                'paidPrice' => $paymentItem->getPaidPrice(),
+                'product' => $products->where(
                     $products[0]->getKeyName(),
                     $paymentItem->getItemId()
                 )->first()->toArray()
@@ -226,13 +242,19 @@ class IyzipayLaravel
         }
 
         $transactionModel = new Transaction([
-            'amount'      => $transaction->getPaidPrice(),
-            'products'    => $iyzipayProducts,
+            'amount' => $transaction->getPaidPrice(),
+            'products' => $iyzipayProducts,
             'iyzipay_key' => $transaction->getPaymentId(),
-            'currency'    => $transaction->getCurrency()
+            'currency' => $transaction->getCurrency()
         ]);
 
-        $transactionModel->creditCard()->associate($creditCard);
+        if ($creditCard instanceof CreditCard) {
+            $transactionModel->creditCard()->associate($creditCard);
+        } else {
+            $creditCardBinNumber = substr($creditCard['cardNumber'], 0, 6);
+            $transactionModel->credit_card_number = $creditCardBinNumber;
+        }
+
         $payable->transactions()->save($transactionModel);
 
         return $transactionModel->fresh();
